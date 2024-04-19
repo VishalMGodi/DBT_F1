@@ -28,36 +28,6 @@ laps = race.laps.pick_driver("VER").pick_quicklaps().reset_index()
     
 for i in range(laps.shape[0]):
     lap = laps.iloc[i]
-    telemetry = lap.get_car_data()
-    weather = lap.get_weather_data()
-    producer.send(
-        topic='weather',
-        value={
-            'LapNumber': int(lap['LapNumber']),
-            'AirTemp': float(weather['AirTemp']),
-            'Humidity': float(weather['Humidity']),
-            'Pressure': float(weather['Pressure']),
-            'Rainfall': int(weather['Rainfall']),
-            'TrackTemp': float(weather['TrackTemp']),
-            'WindSpeed': float(weather['WindSpeed']),
-            'WindDirection': float(weather['WindDirection'])
-        }
-    )
-    for j in range(telemetry.shape[0]):
-        point = telemetry.iloc[j]
-        producer.send(
-            topic='telemetry',
-            value={
-                'LapNumber': int(lap['LapNumber']),
-                'Time': float(point['Time'].total_seconds()),
-                'Speed': float(point['Speed']),
-                'Throttle': float(point['Throttle']),
-                'Brake': int(point['Brake']),
-                'Gear': int(point['nGear']),
-                'RPM': int(point['RPM']),
-                'DRS': int(point['DRS'])
-            }
-        )
     producer.send(
         topic='lap',
         value={
@@ -76,20 +46,6 @@ for i in range(laps.shape[0]):
 
 producer.send(
     topic='lap',
-    value={
-        "end": "end"
-    }
-)
-
-producer.send(
-    topic='weather',
-    value={
-        "end": "end"
-    }
-)
-
-producer.send(
-    topic='telemetry',
     value={
         "end": "end"
     }
