@@ -2,7 +2,6 @@ from pyspark.sql import SparkSession
 import pyspark.sql.functions as F
 from pyspark.sql.functions import col, from_json, explode, window, avg, sum
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, FloatType, TimestampType
-# from pyspark.kafka import KafkaUtils
 
 # Create a SparkSession
 spark = SparkSession.builder \
@@ -10,6 +9,8 @@ spark = SparkSession.builder \
     .config("spark.streaming.stopGracefullyOnShutdown", "true") \
     .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1") \
     .getOrCreate()
+
+spark.sparkContext.setLogLevel('OFF')
 
 # Kafka consumer configuration (replace with your details)
 bootstrap_servers = "localhost:9092"
@@ -51,65 +52,26 @@ df = spark \
     .option("kafka.bootstrap.servers", "localhost:9092") \
     .option("subscribe", "lap") \
     .load()\
-    .select(F.from_json(F.col("value").cast("string"), schema).alias("json_data"))\
-    .select("json_data.*")\
     # .filter(col("LapTime").isNotNull())
 
+df_processed = df.select(F.from_json(F.col("value").cast("string"), schema).alias("json_data")) \
+                  .select("json_data.*") \
+                  .filter(col("LapTime").isNotNull())  # Filter out the "end" signal
 
-#Average laptime per driver
-# agg_df = df.withWatermark("Timestamp", "0 seconds")\
-#     .groupBy(col("Driver"))\
-#     .agg(avg("LapTime").alias("AverageLapTime"))
+# Calculate average lap times and total time spent per stint
+windowed_df = df_processed.withWatermark("Timestamp", "0 seconds") \
+                          .groupBy(col("Driver"), col("Stint"), col("Compound"), window(col("Timestamp"), "600 seconds")) \
+                          .agg(avg("LapTime").alias("AverageLapTime"), sum("LapTime").alias("TotalTime"))
 
-
-# agg_df = df.groupBy(col("Driver"), window(col("LapNumber"), "1")) \
-#     .agg(avg("LapTime").alias("AverageLapTime"))
-
-write = df\
-    .writeStream\
-    .outputMode("append")\
-    .format("console")\
-    .option("truncate", False)\
+# Start the streaming query and print results
+query = windowed_df \
+    .writeStream \
+    .outputMode("update") \
+    .format("console") \
+    .option("truncate", False) \
     .start()
 
-write.awaitTermination()
-# Parse JSON payload and select relevant columns
-# df_processed = df.selectExpr("CAST(value AS STRING)", "cast(value AS BINARY) AS raw_data") \
-#                  .withColumn("data", from_json(col("raw_data"), schema)) \
-#                  .select("data.*") \
-#                  .filter(col("LapNumber").isNotNull())  # Filter out the "end" signal
-
-# # Calculate average lap times and total time spent per stint
-# windowed_df = df_processed.withWatermark("LapNumber", "0 seconds") \
-#                           .groupBy(col("Driver"), window(col("LapNumber"), "2 laps")) \
-#                           .agg(avg("LapTime").alias("AverageLapTime"), sum("LapTime").alias("TotalTime"))
-
-# # Start the streaming query and print results
-# query = windowed_df \
-#     .writeStream \
-#     .outputMode("append") \
-#     .format("console") \
-#     .option("truncate", False) \
-#     .start()
-
-# query.awaitTermination()
-
-
-# ... your streaming DataFrame transformations ...
-
-# print("\n\n\n\nSpark to SQL to Kafka successful\n\n\n\n\n")
-
-# query = df.writeStream \
-#     .outputMode("append") \
-#     .format("console") \
-#     .option("truncate", False) \
-#     .start()  # Start the streaming query
-
-# df.printSchema()
-# df.show()
-
-# query.awaitTermination()  # Wait for the query to finish (optional)
-
+query.awaitTermination()
 
 # Stop the SparkSession
 spark.stop()

@@ -1,16 +1,9 @@
 import warnings
 import fastf1 as ff1
-from fastf1 import plotting
-from fastf1 import utils
 from kafka import KafkaProducer
 import json
-from matplotlib import pyplot as plt
-from matplotlib.pyplot import figure
 import datetime
-import numpy as np
-import pandas as pd
 import time
-from pyspark.sql.functions import to_timestamp
 
 warnings.simplefilter(action='ignore')
 
@@ -20,7 +13,13 @@ ff1.Cache.enable_cache('cache')
 race = ff1.get_session(2024, 1, 'R')
 race.load()
 laps = race.laps.pick_driver("VER").pick_quicklaps().reset_index()
-    
+
+tmpList = []
+
+def convert_to_hours_minutes_seconds(input_string):
+
+    return input_string.replace("0 days ", "")
+
 for i in range(laps.shape[0]):
     lap = laps.iloc[i]
     producer.send(
@@ -39,7 +38,20 @@ for i in range(laps.shape[0]):
             'Position': int(lap['Position'])
         }
     )
-    # time.sleep(2)
+    tmpList.append(float(lap['LapTime'].total_seconds()))
+    print(f"Lap {i+1} sent : {float(lap['LapTime'].total_seconds())}")
+    time.sleep(10)
+
+
+for i in range(0, len(tmpList)):
+    avgCal = tmpList[i]
+    print("-----",i, avgCal)
+    for j in range(i+1, len(tmpList)):
+        avgCal = (avgCal*(j-i) + tmpList[j]) / (j-i+1)
+        print(avgCal)
+    print("-----")
+    break
+
 
 producer.send(
     topic='lap',
