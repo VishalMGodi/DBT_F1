@@ -6,16 +6,11 @@ from kafka import KafkaProducer
 import json
 from matplotlib import pyplot as plt
 from matplotlib.pyplot import figure
-from datetime import timedelta
-
+import datetime
 import numpy as np
 import pandas as pd
-
-def timeConverter(time):
-    return time.total_seconds()
-    # time = time.replace('0 days', '')
-    # hours, minutes, seconds = map(float, time.split(':'))
-    # return minutes*60 + seconds
+import time
+from pyspark.sql.functions import to_timestamp
 
 warnings.simplefilter(action='ignore')
 
@@ -31,6 +26,7 @@ for i in range(laps.shape[0]):
     producer.send(
         topic='lap',
         value={
+            'Timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'LapNumber': int(lap['LapNumber']),
             'Driver': lap['Driver'],
             'LapTime': float(lap['LapTime'].total_seconds()),
@@ -43,6 +39,7 @@ for i in range(laps.shape[0]):
             'Position': int(lap['Position'])
         }
     )
+    # time.sleep(2)
 
 producer.send(
     topic='lap',

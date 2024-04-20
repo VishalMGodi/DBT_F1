@@ -1,7 +1,7 @@
 from pyspark.sql import SparkSession
 import pyspark.sql.functions as F
 from pyspark.sql.functions import col, from_json, explode, window, avg, sum
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType, FloatType
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, FloatType, TimestampType
 # from pyspark.kafka import KafkaUtils
 
 # Create a SparkSession
@@ -24,6 +24,7 @@ kafka_params = {
 
 # Define a schema for the JSON data
 schema = StructType([
+    StructField("Timestamp", TimestampType(), True),
     StructField("LapNumber", IntegerType(), True),
     StructField("Driver", StringType(), True),
     StructField("LapTime", FloatType(), True),
@@ -34,16 +35,6 @@ schema = StructType([
     StructField("Compound", StringType(), True),
     StructField("TyreLife", IntegerType(), True),
     StructField("Position", IntegerType(), True)
-    # col("LapNumber", "integer"),
-    # col("Driver", "string"),
-    # col("LapTime", "float"),
-    # col("Stint", "integer"),
-    # col("Sector1Time", "float"),
-    # col("Sector2Time", "float"),
-    # col("Sector3Time", "float"),
-    # col("Compound", "string"),
-    # col("TyreLife", "integer"),
-    # col("Position", "integer")
 ])
 
 # Create a Kafka streaming DataFrame
@@ -61,8 +52,18 @@ df = spark \
     .option("subscribe", "lap") \
     .load()\
     .select(F.from_json(F.col("value").cast("string"), schema).alias("json_data"))\
-    .select("json_data.*")
+    .select("json_data.*")\
+    # .filter(col("LapTime").isNotNull())
 
+
+#Average laptime per driver
+# agg_df = df.withWatermark("Timestamp", "0 seconds")\
+#     .groupBy(col("Driver"))\
+#     .agg(avg("LapTime").alias("AverageLapTime"))
+
+
+# agg_df = df.groupBy(col("Driver"), window(col("LapNumber"), "1")) \
+#     .agg(avg("LapTime").alias("AverageLapTime"))
 
 write = df\
     .writeStream\

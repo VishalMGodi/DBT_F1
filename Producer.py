@@ -11,12 +11,6 @@ from datetime import timedelta
 import numpy as np
 import pandas as pd
 
-def timeConverter(time):
-    return time.total_seconds()
-    # time = time.replace('0 days', '')
-    # hours, minutes, seconds = map(float, time.split(':'))
-    # return minutes*60 + seconds
-
 warnings.simplefilter(action='ignore')
 
 producer = KafkaProducer(value_serializer = lambda m: json.dumps(m).encode('ascii'))
