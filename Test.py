@@ -3,27 +3,48 @@ import pyspark.sql.functions as F
 from pyspark.sql.functions import col, from_json, explode, window, avg, sum
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, FloatType, TimestampType
 
-# Create a SparkSession
 spark = SparkSession.builder \
     .appName("F1LapTimeProcessor") \
     .config("spark.streaming.stopGracefullyOnShutdown", "true") \
     .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1") \
+    .config("spark.jars", "file:///home/varun/Projects/DBT_F1/dependencies/mysql-connector-java-5.1.46/mysql-connector-java-5.1.46.jar") \
+    .config("spark.executor.extraClassPath", "file:///home/varun/Projects/DBT_F1/dependencies/mysql-connector-java-5.1.46/mysql-connector-java-5.1.46.jar") \
+    .config("spark.executor.extraLibrary", "file:///home/varun/Projects/DBT_F1/dependencies/mysql-connector-java-5.1.46/mysql-connector-java-5.1.46.jar") \
+    .config("spark.driver.extraClassPath", "file:///home/varun/Projects/DBT_F1/dependencies/mysql-connector-java-5.1.46/mysql-connector-java-5.1.46.jar") \
     .getOrCreate()
 
-spark.sparkContext.setLogLevel('OFF')
+spark.sparkContext.setLogLevel('ERROR')
 
-# Kafka consumer configuration (replace with your details)
-bootstrap_servers = "localhost:9092"
-subscribe_topic = "lap"
-kafka_params = {
-    "bootstrap.servers": bootstrap_servers,
-    "key.deserializer": "org.apache.kafka.common.serialization.StringDeserializer",
-    "value.deserializer": "org.apache.kafka.common.serialization.StringDeserializer",
-    # "group.id": "f1-lap-consumer",
-    "enable.auto.commit": False  # Manually commit offsets for better control
-}
+mysql_db_driver_class = "com.mysql.jdbc.Driver"
+mysql_db_url = "jdbc:mysql://localhost:3306/f1db"
+table_name = "lap_times"
+host_name = "localhost"
+user_name = "root"
+password = ""
+port_no = "3306"
+database_name = "f1db"
 
-# Define a schema for the JSON data
+mysql_select_query = f"(SELECT * FROM {table_name}) AS {table_name}"
+# print("mysql_select_query: ")
+# print(mysql_select_query)
+
+mysql_jdbc_url = f"jdbc:mysql://{host_name}:{port_no}/{database_name}?autoReconnect=true&useSSL=false"
+# print("mysql_jdbc_url: ")
+# print(mysql_jdbc_url)
+
+laps_df = spark.read.format("jdbc") \
+    .option("url", mysql_jdbc_url) \
+    .option("driver", mysql_db_driver_class) \
+    .option("dbtable", mysql_select_query) \
+    .option("user", user_name) \
+    .option("password", password) \
+    .load()
+
+laps_df.createOrReplaceTempView("lap_times")
+
+laps_query = spark.sql("SELECT * FROM lap_times")
+laps_query.show(10,False)
+
 schema = StructType([
     StructField("Timestamp", TimestampType(), True),
     StructField("LapNumber", IntegerType(), True),
@@ -38,14 +59,6 @@ schema = StructType([
     StructField("Position", IntegerType(), True)
 ])
 
-# Create a Kafka streaming DataFrame
-# df = spark \
-#     .readStream \
-#     .format("kafka") \
-#     .options(**kafka_params) \
-#     .option("subscribe", subscribe_topic) \
-#     .load()
-
 df = spark \
     .readStream \
     .format("kafka") \
@@ -56,14 +69,23 @@ df = spark \
 
 df_processed = df.select(F.from_json(F.col("value").cast("string"), schema).alias("json_data")) \
                   .select("json_data.*") \
-                  .filter(col("LapTime").isNotNull())  # Filter out the "end" signal
+                  .filter(col("LapTime").isNotNull())
 
-# Calculate average lap times and total time spent per stint
+# Store the processed data in a temporary view
+df_processed.createOrReplaceTempView("lap_times_processed")
+
+processed_select_query = spark.sql("SELECT * FROM lap_times_processed")
+
+streaming_query = processed_select_query.writeStream \
+    .outputMode("append") \
+    .format("console") \
+    .option("truncate", False) \
+    .start()
+
 windowed_df = df_processed.withWatermark("Timestamp", "0 seconds") \
                           .groupBy(col("Driver"), col("Stint"), col("Compound"), window(col("Timestamp"), "600 seconds")) \
                           .agg(avg("LapTime").alias("AverageLapTime"), sum("LapTime").alias("TotalTime"))
 
-# Start the streaming query and print results
 query = windowed_df \
     .writeStream \
     .outputMode("update") \
@@ -71,7 +93,6 @@ query = windowed_df \
     .option("truncate", False) \
     .start()
 
-query.awaitTermination()
+# query.awaitTermination()
 
-# Stop the SparkSession
 spark.stop()

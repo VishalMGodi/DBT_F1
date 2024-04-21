@@ -40,7 +40,7 @@ for i in range(laps.shape[0]):
     )
     tmpList.append(float(lap['LapTime'].total_seconds()))
     print(f"Lap {i+1} sent : {float(lap['LapTime'].total_seconds())}")
-    time.sleep(10)
+    time.sleep(2)
 
 
 for i in range(0, len(tmpList)):
