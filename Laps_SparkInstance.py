@@ -39,7 +39,7 @@ parsed_lap_df = lap_df.select(F.from_json(F.col("value").cast("string"), lap_sch
 
 
 windowed_df = parsed_lap_df.withWatermark("Timestamp", "0 seconds") \
-                          .groupBy(col("Driver"), col("Stint"), col("Compound"), window(col("Timestamp"), "65 seconds")) \
+                          .groupBy(col("Driver"), col("Stint"), col("Compound"), window(col("Timestamp"), "65 seconds"), "10 seconds") \
                           .agg(avg("LapTime").alias("Average Lap Time"), array_max("LapTime").alias("Best Lap Time"))
 
 aggregated_df_write = windowed_df \

@@ -1,6 +1,6 @@
 from pyspark.sql import SparkSession
 import pyspark.sql.functions as F
-from pyspark.sql.functions import col, window, avg, sum, mode
+from pyspark.sql.functions import col, avg, mode, array_max
 from pyspark.sql.types import StructType, StructField, IntegerType, FloatType, TimestampType
 
 spark = SparkSession.builder \
@@ -37,7 +37,7 @@ parsed_car_df = car_df.select(F.from_json(F.col("value").cast("string"), car_sch
 
 windowed_df = parsed_car_df.withWatermark("Timestamp", "0 seconds") \
                           .groupBy(col("LapNumber")) \
-                          .agg(avg("Throttle"), avg("Speed"),avg("RPM"), mode("Gear"))
+                          .agg(avg("Throttle"), avg("Speed"),avg("RPM"), mode("Gear"), array_max("Speed"))
 
 aggregated_df_write = windowed_df \
     .writeStream \
